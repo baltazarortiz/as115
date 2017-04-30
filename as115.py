@@ -1,6 +1,33 @@
 import argparse
 import os
 import subprocess
+import re
+
+def sub_define(line):
+    # replace symbols according to .define list
+    # append comment showing what the substitution was for readability
+    for d in defines:
+        #skip full line comments and lines that don't need replacing
+        if line.startswith(';') == False and d[0] in line:
+            orig = line
+            
+            # lines with a comment at the end
+            if ";" in line:
+                commentStart = line.find(';')
+                if d[0] in line[0:commentStart]:
+                   # line = line[0:commentStart].replace(d[0],d[1]) + line[commentStart:] + " ; " + d[0] + " = " + d[1]
+                   line = re.sub(r'\b' + d[0] + r'\b', d[1], line[0:commentStart]) + line[commentStart:]
+                   
+                   if orig != line:
+                       line = line + " ; " + d[0] + " = " + d[1]
+            else:
+                #code with no comment
+               #line = line.replace(d[0],d[1]) + " ; " + d[0] + " = " + d[1]
+               line = re.sub(r'\b' + d[0] + r'\b', d[1], line)
+               
+               if orig != line:
+                   line = line + " ; " + d[0] + " = " + d[1]
+    return line
 
 # Define the command-line arguments
 parser = argparse.ArgumentParser(description='AS115 1.0 (wrapper for AS31) -- Report AS115 problems to trehans@mit.edu and AS31 problems to paul@pjrc.com')
@@ -21,6 +48,7 @@ os.chdir(dirname)
 
 # Construct the larger assembly file from the smaller assembly files by looking for .inc directives
 stack = [('.inc', filename)]
+defines = []
 allContents = []
 while (len(stack) > 0):
     (t, s) = stack.pop()
@@ -32,7 +60,16 @@ while (len(stack) > 0):
                     incfile = line[5:]
                     stack.append(('line', '; ==== Included from \"' + incfile + '\" by AS115: ===='))
                     stack.append(('.inc', incfile))
+                elif line.startswith('.define'):
+                    defines.append(line[8:].split())
+                  
+                    # remove a leading R if the user is trying to alias a register
+                    if defines[-1][1].lower().startswith("r") and defines[-1][1][1].isdigit():
+                        defines[-1][1] = defines[-1][1][1:]
                 else:
+                    # Perform .define substitutions in all non-comment lines
+                    line = sub_define(line)
+                        
                     stack.append(('line', line))
     else:
         allContents.append(s)
